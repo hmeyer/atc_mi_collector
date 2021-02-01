@@ -217,10 +217,10 @@ uint16_t swap_endian(uint16_t v) {
 
 struct MetricFamilies {
         explicit MetricFamilies(prometheus::Registry& registry) :
-                temperature(prometheus::BuildGauge().Name("temperature").Help("Temperature").Register(registry)),
-                humidity(prometheus::BuildGauge().Name("humidity").Help("Humidity").Register(registry)),
-                battery_level(prometheus::BuildGauge().Name("battery_level").Help("Battery Level").Register(registry)),
-                battery_voltage(prometheus::BuildGauge().Name("battery_voltage").Help("Battery Voltage").Register(registry)){
+                temperature(prometheus::BuildGauge().Name("btle_temperature_celsuis").Help("Temperature").Register(registry)),
+                humidity(prometheus::BuildGauge().Name("btle_humidity_percent").Help("Humidity").Register(registry)),
+                battery_level(prometheus::BuildGauge().Name("btle_battery_percent").Help("Battery Level").Register(registry)),
+                battery_voltage(prometheus::BuildGauge().Name("btle_battery_volts").Help("Battery Voltage").Register(registry)){
         }
         prometheus::Family<prometheus::Gauge>& temperature;
         prometheus::Family<prometheus::Gauge>& humidity;
