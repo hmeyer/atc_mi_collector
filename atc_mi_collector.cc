@@ -22,6 +22,7 @@
 #include <prometheus/gauge.h>
 #include <prometheus/exposer.h>
 #include <prometheus/registry.h>
+#include "aliases.h"
 
 
 #define HCI_STATE_NONE       0
