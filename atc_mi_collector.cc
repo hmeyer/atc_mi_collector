@@ -273,7 +273,7 @@ void parse_packet(const uint8_t* data, int length) {
 void set_metrics(MetricFamilies& families) {
         if (!atc1441_.has_value()) return;
         if (!metrics_.has_value()) {
-                metrics_.emplace(name_, families);
+                metrics_.emplace(maybe_alias(name_), families);
         }
         metrics_->temperature.Set(atc1441_->temperature / 10.0);
         metrics_->humidity.Set(atc1441_->humidity_percent);
