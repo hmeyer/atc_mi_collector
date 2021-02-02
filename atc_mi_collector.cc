@@ -1,4 +1,5 @@
-// g++ -std=c++17 bluez-scanner.cc -lbluetooth -o bluez-scanner -I../prometheus-cpp/_build/deploy/usr/local/include/ -L ../prometheus-cpp/_build/deploy/usr/local/lib -lprometheus-cpp-core
+// This might require setting capabilities to run as non-root:
+// sudo setcap 'cap_net_raw,cap_net_admin+eip' /absolute/path/to/atc_mi_collector
 
 #include <stdlib.h>
 #include <errno.h>
