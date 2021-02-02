@@ -386,14 +386,6 @@ void scan() {
                 if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - scan_start) > std::chrono::seconds(60)) {
                         done = 1;
                 }
-                for(auto it = devices_.begin(); it != devices_.end(); ++it) {
-                        if (it->second.age() > std::chrono::minutes(10)) {
-                                auto it_copy = it;
-                                ++it;
-                                devices_.erase(it_copy);
-                        }
-
-                }
                 int len = 0;
                 unsigned char buf[HCI_MAX_EVENT_SIZE];
                 while ((len = read(current_hci_state_.device_handle, buf, sizeof(buf))) < 0)
@@ -441,6 +433,19 @@ void scan() {
         stop_hci_scan(current_hci_state_);
 }
 
+void prune_old_devices() {
+        for(auto it = devices_.begin(); it != devices_.end();) {
+                if (it->second.age() > std::chrono::minutes(10)) {
+                        std::cerr << "Haven't seen device [" << it->first << ", " << it->second << "] for too long. Erasing." << std::endl;
+                        auto it_copy = it;
+                        ++it;
+                        devices_.erase(it_copy);
+                } else {
+                        ++it;
+                }
+        }
+}
+
 private:
 
 struct hci_state current_hci_state_;
@@ -457,6 +462,7 @@ int main(void)
 
         while(true) {
                 collector.scan();
+                collector.prune_old_devices();
         }
         return 0;
 }
