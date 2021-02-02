@@ -139,14 +139,6 @@ void stop_hci_scan(struct hci_state current_hci_state)
         current_hci_state.state = HCI_STATE_OPEN;
 }
 
-void close_hci_device(struct hci_state current_hci_state)
-{
-        if (current_hci_state.state == HCI_STATE_OPEN)
-        {
-                hci_close_dev(current_hci_state.device_handle);
-        }
-}
-
 void error_check_and_exit(struct hci_state current_hci_state)
 {
         if (current_hci_state.has_error)
