@@ -188,20 +188,21 @@ template<> struct hash<BtAddr>
 };
 }
 
-struct Atc1441 {
-        int16_t temperature;
-        uint8_t humidity_percent;
-        uint8_t battery_percent;
-        int16_t battery_mv;
+struct MiData {
+        float temperature;
+        float humidity_percent;
+        float battery_percent;
+        float battery_v;
         uint8_t count;
 };
-std::ostream& operator<<(std::ostream& os, const Atc1441& a) {
+
+std::ostream& operator<<(std::ostream& os, const MiData& d) {
         os << std::dec;
-        os << "temperature: " << a.temperature / 10.0 << std::endl;
-        os << "humidity_percent: " << int(a.humidity_percent) << std::endl;
-        os << "battery_percent: " << int(a.battery_percent) << std::endl;
-        os << "battery_v: " << a.battery_mv / 1000.0 << std::endl;
-        os << "count: " << int(a.count) << std::endl;
+        os << "temperature: " << d.temperature << std::endl;
+        os << "humidity_percent: " << d.humidity_percent << std::endl;
+        os << "battery_percent: " << d.battery_percent << std::endl;
+        os << "battery_v: " << d.battery_v << std::endl;
+        os << "count: " << int(d.count) << std::endl;
         return os;
 }
 
@@ -264,33 +265,43 @@ void parse_packet(const uint8_t* data, int length) {
         }
 }
 void set_metrics(MetricFamilies& families) {
-        if (!atc1441_.has_value()) return;
+        if (!mi_data_.has_value()) return;
         if (!metrics_.has_value()) {
                 metrics_.emplace(maybe_alias(name_), families);
         }
-        metrics_->temperature.Set(atc1441_->temperature / 10.0);
-        metrics_->humidity.Set(atc1441_->humidity_percent);
-        metrics_->battery_level.Set(atc1441_->battery_percent);
-        metrics_->battery_voltage.Set(atc1441_->battery_mv / 1000.0);
+        metrics_->temperature.Set(mi_data_->temperature);
+        metrics_->humidity.Set(mi_data_->humidity_percent);
+        metrics_->battery_level.Set(mi_data_->battery_percent);
+        metrics_->battery_voltage.Set(mi_data_->battery_v);
 }
 std::chrono::seconds age() const {
         return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - last_seen_);
 }
+bool has_mi_data() const {
+        return mi_data_.has_value();
+}
 
 friend std::ostream& operator<<(std::ostream& os, const Device& d);
 private:
-void parse_atc1441(const uint8_t* data, std::size_t length) {
-        Atc1441 a;
-        if (length != 13) {
+void parse_mi_data(const uint8_t* data, std::size_t length) {
+        MiData d;
+        if (length == 15) { // pvvx
+                d.temperature = swap_endian(*reinterpret_cast<const uint16_t*>(data + 6)) / 100.0;
+                d.humidity_percent = swap_endian(*reinterpret_cast<const uint16_t*>(data + 8)) / 100.0;
+                d.battery_v = swap_endian(*reinterpret_cast<const uint16_t*>(data + 10)) / 1000.0;
+                d.battery_percent = data[12];
+                d.count = data[13];
+                mi_data_ = d;
+        } else if (length == 13) { // atc1441
+                d.temperature = swap_endian(*reinterpret_cast<const uint16_t*>(data + 6)) / 10.0;
+                d.humidity_percent = data[8];
+                d.battery_percent = data[9];
+                d.battery_v = swap_endian(*reinterpret_cast<const uint16_t*>(data + 10)) / 1000.0;
+                d.count = data[12];
+                mi_data_ = d;
+        } else {
                 std::cerr << "wrong length:" << std::dec << length;
-                return;
         }
-        a.temperature = swap_endian(*reinterpret_cast<const uint16_t*>(data + 6));
-        a.humidity_percent = data[8];
-        a.battery_percent = data[9];
-        a.battery_mv = swap_endian(*reinterpret_cast<const uint16_t*>(data + 10));
-        a.count = data[12];
-        atc1441_ = a;
 }
 void parse_data(const uint8_t* data, int length) {
         length--;
@@ -303,7 +314,7 @@ void parse_data(const uint8_t* data, int length) {
                 break;
         case EIR_SERVICE_DATA:
                 if (uuid == 0x181a) {
-                        parse_atc1441(data + 2, length - 2);
+                        parse_mi_data(data + 2, length - 2);
                         return;
                 } else {
                         service_data_.clear();
@@ -327,7 +338,7 @@ std::chrono::time_point<std::chrono::system_clock> last_seen_;
 std::string name_;
 std::vector<uint8_t> service_data_;
 std::unordered_map<uint8_t, std::vector<uint8_t> > data_;
-std::optional<Atc1441> atc1441_;
+std::optional<MiData> mi_data_;
 std::optional<Metrics> metrics_;
 };
 
@@ -335,8 +346,8 @@ std::ostream& operator<<(std::ostream& os, const Device& d) {
         auto t_c = std::chrono::system_clock::to_time_t(d.last_seen_);
         os << "last seen: " << std::put_time(std::localtime(&t_c), "%F %T") << std::endl;
         os << "Name: " << d.name_ << std::endl;
-        if (d.atc1441_.has_value()) {
-                os << *d.atc1441_;
+        if (d.mi_data_.has_value()) {
+                os << *d.mi_data_;
         }
         os << std::hex;
         if (!d.service_data_.empty()) {
@@ -407,7 +418,7 @@ void scan() {
                         BtAddr addr(info->bdaddr);
                         auto& device = devices_[addr];
                         device.parse_packet(info->data, info->length);
-                        if (device.name().rfind("ATC_", 0) == 0) {
+                        if (device.has_mi_data()) {
                                 device.set_metrics(families_);
                                 std::cout << "#############################" << endl;
                                 std::cout << "Event: 0x" << std::hex << (int)info->evt_type << std::endl;
