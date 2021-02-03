@@ -266,7 +266,7 @@ void parse_packet(const uint8_t* data, int length) {
         }
 }
 void set_metrics(MetricFamilies& families) {
-        if (!mi_data_.has_value()) return;
+        if (!mi_data_.has_value() || name_.empty()) return;
         if (!metrics_.has_value()) {
                 metrics_.emplace(maybe_alias(name_), families);
         }
