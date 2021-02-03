@@ -194,6 +194,7 @@ struct MiData {
         float battery_percent;
         float battery_v;
         uint8_t count;
+        bool is_pvvx = false;
 };
 
 std::ostream& operator<<(std::ostream& os, const MiData& d) {
@@ -286,6 +287,7 @@ private:
 void parse_mi_data(const uint8_t* data, std::size_t length) {
         MiData d;
         if (length == 15) { // pvvx
+                d.is_pvvx = true;
                 d.temperature = swap_endian(*reinterpret_cast<const uint16_t*>(data + 6)) / 100.0;
                 d.humidity_percent = swap_endian(*reinterpret_cast<const uint16_t*>(data + 8)) / 100.0;
                 d.battery_v = swap_endian(*reinterpret_cast<const uint16_t*>(data + 10)) / 1000.0;
@@ -293,6 +295,10 @@ void parse_mi_data(const uint8_t* data, std::size_t length) {
                 d.count = data[13];
                 mi_data_ = d;
         } else if (length == 13) { // atc1441
+                if (mi_data_.has_value() && mi_data_->is_pvvx) {
+                        // Skip atc1441 data, if this device also supports higher resolution pvvx.
+                        return;
+                }
                 d.temperature = swap_endian(*reinterpret_cast<const uint16_t*>(data + 6)) / 10.0;
                 d.humidity_percent = data[8];
                 d.battery_percent = data[9];
