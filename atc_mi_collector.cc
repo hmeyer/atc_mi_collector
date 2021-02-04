@@ -204,6 +204,7 @@ std::ostream& operator<<(std::ostream& os, const MiData& d) {
         os << "battery_percent: " << d.battery_percent << std::endl;
         os << "battery_v: " << d.battery_v << std::endl;
         os << "count: " << int(d.count) << std::endl;
+        os << "is_pvvx " << std::boolalpha << d.is_pvvx << std::endl;
         return os;
 }
 
@@ -246,13 +247,12 @@ struct Metrics {
 
 class Device {
 public:
-Device() {
+Device() : last_update_{std::chrono::system_clock::now()} {
 };
 const std::string& name() const {
         return name_;
 }
 void parse_packet(const uint8_t* data, int length) {
-        last_seen_ = std::chrono::system_clock::now();
         const uint8_t* end = data + length;
         while(data < end) {
                 size_t data_len = *data++;
@@ -276,7 +276,7 @@ void set_metrics(MetricFamilies& families) {
         metrics_->battery_voltage.Set(mi_data_->battery_v);
 }
 std::chrono::seconds age() const {
-        return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - last_seen_);
+        return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - last_update_);
 }
 bool has_mi_data() const {
         return mi_data_.has_value();
@@ -288,26 +288,29 @@ void parse_mi_data(const uint8_t* data, std::size_t length) {
         MiData d;
         if (length == 15) { // pvvx
                 d.is_pvvx = true;
-                d.temperature = swap_endian(*reinterpret_cast<const uint16_t*>(data + 6)) / 100.0;
-                d.humidity_percent = swap_endian(*reinterpret_cast<const uint16_t*>(data + 8)) / 100.0;
-                d.battery_v = swap_endian(*reinterpret_cast<const uint16_t*>(data + 10)) / 1000.0;
+                d.temperature = *reinterpret_cast<const int16_t*>(data + 6) / 100.0;
+                d.humidity_percent = *reinterpret_cast<const uint16_t*>(data + 8) / 100.0;
+                d.battery_v = *reinterpret_cast<const uint16_t*>(data + 10) / 1000.0;
                 d.battery_percent = data[12];
                 d.count = data[13];
-                mi_data_ = d;
         } else if (length == 13) { // atc1441
-                if (mi_data_.has_value() && mi_data_->is_pvvx) {
-                        // Skip atc1441 data, if this device also supports higher resolution pvvx.
-                        return;
-                }
+                d.is_pvvx = false;
                 d.temperature = swap_endian(*reinterpret_cast<const uint16_t*>(data + 6)) / 10.0;
                 d.humidity_percent = data[8];
                 d.battery_percent = data[9];
                 d.battery_v = swap_endian(*reinterpret_cast<const uint16_t*>(data + 10)) / 1000.0;
                 d.count = data[12];
-                mi_data_ = d;
+                if (mi_data_.has_value() && mi_data_->is_pvvx) {
+                        // Skip atc1441 data, if this device also supports higher resolution pvvx.
+                        std::cerr << "for: "  << name_ << " skipping atc1441 data:"<< d << std::endl;
+                        return;
+                }
         } else {
                 std::cerr << "wrong length:" << std::dec << length;
+                return;
         }
+        last_update_ = std::chrono::system_clock::now();
+        mi_data_ = d;
 }
 void parse_data(const uint8_t* data, int length) {
         length--;
@@ -321,56 +324,26 @@ void parse_data(const uint8_t* data, int length) {
         case EIR_SERVICE_DATA:
                 if (uuid == 0x181a) {
                         parse_mi_data(data + 2, length - 2);
-                        return;
-                } else {
-                        service_data_.clear();
-                        for (int i = 0; i < length; i++)
-                        {
-                                service_data_.push_back(data[i]);
-                        }
                 }
                 break;
         default:
-                std::vector<uint8_t> v;
-                for (int i = 0; i < length; i++)
-                {
-                        v.push_back(data[i]);
-                }
-                data_[tag] = std::move(v);
+                // Ignore.
+                break;
         }
 }
 
-std::chrono::time_point<std::chrono::system_clock> last_seen_;
+std::chrono::time_point<std::chrono::system_clock> last_update_;
 std::string name_;
-std::vector<uint8_t> service_data_;
-std::unordered_map<uint8_t, std::vector<uint8_t> > data_;
 std::optional<MiData> mi_data_;
 std::optional<Metrics> metrics_;
 };
 
 std::ostream& operator<<(std::ostream& os, const Device& d) {
-        auto t_c = std::chrono::system_clock::to_time_t(d.last_seen_);
-        os << "last seen: " << std::put_time(std::localtime(&t_c), "%F %T") << std::endl;
         os << "Name: " << d.name_ << std::endl;
+        auto t = std::chrono::system_clock::to_time_t(d.last_update_);
+        os << "last update: " << std::put_time(std::localtime(&t), "%F %T") << std::endl;
         if (d.mi_data_.has_value()) {
                 os << *d.mi_data_;
-        }
-        os << std::hex;
-        if (!d.service_data_.empty()) {
-                os << "Service Data: ";
-                for(unsigned int i = 0; i < d.service_data_.size(); i++) {
-                        if (i) os << " ";
-                        os << std::setfill('0') << std::setw(2) << int(d.service_data_[i]);
-                }
-                os << std::endl;
-        }
-        for(const auto& [tag, v] : d.data_) {
-                os << "tag[0x" << std::hex << std::setfill('0') << std::setw(2) << int(tag) << "]: ";
-                for(unsigned int i = 0; i < v.size(); i++) {
-                        if (i) os << " ";
-                        os << std::setfill('0') << std::setw(2) << int(v[i]);
-                }
-                os << std::endl;
         }
         return os;
 }
