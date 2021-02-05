@@ -23,7 +23,6 @@
 #include <prometheus/gauge.h>
 #include <prometheus/exposer.h>
 #include <prometheus/registry.h>
-#include "aliases.h"
 
 
 #define HCI_STATE_NONE       0
@@ -268,7 +267,7 @@ void parse_packet(const uint8_t* data, int length) {
 void set_metrics(MetricFamilies& families) {
         if (!mi_data_.has_value() || name_.empty()) return;
         if (!metrics_.has_value()) {
-                metrics_.emplace(maybe_alias(name_), families);
+                metrics_.emplace(name_, families);
         }
         metrics_->temperature.Set(mi_data_->temperature);
         metrics_->humidity.Set(mi_data_->humidity_percent);
