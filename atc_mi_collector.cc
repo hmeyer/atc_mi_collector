@@ -312,6 +312,15 @@ void parse_mi_data(const uint8_t* data, std::size_t length) {
         last_update_ = std::chrono::system_clock::now();
         mi_data_ = d;
 }
+
+void parse_name(const uint8_t* data, int length) {
+        auto name = std::string_view(reinterpret_cast<const char*>(data), length);
+        if (name != name_) {
+                metrics_.reset();
+                name_ = name;
+        }
+}
+
 void parse_data(const uint8_t* data, int length) {
         length--;
         const uint8_t tag = *data++;
@@ -319,7 +328,7 @@ void parse_data(const uint8_t* data, int length) {
         switch(tag) {
         case EIR_NAME_SHORT:
         case EIR_NAME_COMPLETE:
-                name_ = std::string(reinterpret_cast<const char*>(data), length);
+                parse_name(data, length);
                 break;
         case EIR_SERVICE_DATA:
                 if (uuid == 0x181a) {
